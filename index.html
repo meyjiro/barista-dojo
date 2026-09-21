@@ -416,7 +416,7 @@ function finish(){
   clearInterval(RUN.timer); clearTimeout(RUN.auto); stopSpeak();
   const r = RUN, n = r.qs.length, ok = r.results.filter(x=>x.ok).length, sec = elapsed(), pct = Math.round(ok/n*100);
   const answeredAll = r.results.length === n; // 時間切れの場合は未回答＝不正解
-  const hist = S.get('history', []); hist.push({ at: new Date().toISOString().slice(0,16), mode: r.opt.mode, ch: r.opt.ch||null, n, ok, pct, sec }); S.set('history', hist.slice(-200));
+  const hist = S.get('history', []); hist.push({ at: (d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`)(new Date()), mode: r.opt.mode, ch: r.opt.ch||null, n, ok, pct, sec }); S.set('history', hist.slice(-200));
   const pass = r.exam ? pct >= DATA.exam.pass : pct===100;
   const msg = r.exam ? (pass ? '🎉 合格ライン突破！' : `あと${Math.ceil(n*DATA.exam.pass/100)-ok}問で合格ライン`) : pct===100 ? '🎉 パーフェクト！' : pct>=80 ? 'いい感じ！' : pct>=60 ? 'もう一息' : '教科書に戻ろう';
   if(pass) fanfare(); else if(pct>=70) pingPong();
