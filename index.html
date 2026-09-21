@@ -98,6 +98,8 @@ a{color:var(--accent)}
 .stamp.show{animation:pop .7s ease-out}
 @keyframes pop{0%{opacity:0;transform:scale(.4)}25%{opacity:1;transform:scale(1.15)}60%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1)}}
 .timer{font-size:13px;color:var(--ink2)}
+.listen{margin:12px 0;padding:10px 14px;border-radius:12px;background:var(--ok-bg);color:var(--ok);font-weight:700;font-size:14px;animation:pulse 1.2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
 .timer.warn{color:var(--ng);font-weight:700}
 /* result */
 .score{text-align:center;padding:18px 0 6px}
@@ -311,6 +313,15 @@ function tick(){ tone(800, 0, .04, 'square', .05); }
 
 /* ========== 声 ========== */
 let voiceOn = S.get('voice', true);
+let micOn = S.get('mic', false);
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recog = null, wakeLock = null;
+function stopListen(){ if(recog){ try{ recog.onresult = null; recog.onend = null; recog.onerror = null; recog.abort(); }catch(e){} recog = null; } const li = document.getElementById('listen'); if(li) li.hidden = true; }
+// 聞き取った言葉 → 0..3（A/B/C/D・1〜4・日本語読み）
+function parseChoice(t){ t = (t||'').toLowerCase().replace(/[\s。、．.,]/g,''); const map = [ [/^(a|エー|えー|えい|1|１|一|いち|いちばん|ａ)/,0], [/^(b|ビー|びー|2|２|二|に|にばん|ｂ)/,1], [/^(c|シー|しー|3|３|三|さん|さんばん|ｃ)/,2], [/^(d|ディー|でぃー|4|４|四|よん|し|よんばん|ｄ)/,3] ]; for(const [re,i] of map){ if(re.test(t)) return i; } const m = t.match(/(a|b|c|d|エー|ビー|シー|ディー|[1-4１-４一二三四])/); if(m){ const k = m[1]; if(/^(a|エー|1|１|一)$/.test(k)) return 0; if(/^(b|ビー|2|２|二)$/.test(k)) return 1; if(/^(c|シー|3|３|三)$/.test(k)) return 2; return 3; } return -1; }
+function listenOnce(){ return new Promise(res => { if(!SR){ res(null); return; } try{ stopListen(); recog = new SR(); recog.lang = 'ja-JP'; recog.interimResults = false; recog.maxAlternatives = 5; let done = false; const fin = v => { if(done) return; done = true; res(v); }; recog.onresult = e => { const alts = [...e.results[0]].map(a => a.transcript); for(const a of alts){ const k = parseChoice(a); if(k >= 0){ fin({k, heard:a}); return; } } fin({k:-1, heard:alts[0]||''}); }; recog.onerror = e => fin({k:-1, err:e.error}); recog.onend = () => fin(null); const li = document.getElementById('listen'); if(li) li.hidden = false; recog.start(); }catch(e){ res(null); } }); }
+async function keepAwake(){ try{ if(navigator.wakeLock && !wakeLock){ wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } }catch(e){} }
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible' && RUN && micOn) keepAwake(); });
 function stopSpeak(){ try{ speechSynthesis.cancel(); }catch(e){} }
 function speak(text, rate){ return new Promise(res => { if(!voiceOn || !('speechSynthesis' in window)) return res(); try{ const u = new SpeechSynthesisUtterance(text); u.lang='ja-JP'; u.rate = rate||1.05; const vs = speechSynthesis.getVoices().filter(v=>/ja/i.test(v.lang)); const v = vs.find(v=>/Kyoko|O-ren|Hattori|Otoya/i.test(v.name))||vs[0]; if(v) u.voice=v; u.onend=res; u.onerror=res; speechSynthesis.speak(u); }catch(e){ res(); } }); }
 try{ speechSynthesis.getVoices(); }catch(e){}
@@ -383,6 +394,8 @@ function renderQuizMenu(){
   app.innerHTML = header() + `
   <div class="card"><h2 style="font-size:20px;font-weight:900">🎯 問題</h2><p class="muted" style="margin:6px 0 12px">答えを押すと ピンポーン／ブブー。声で読み上げ（${voiceOn?'ON':'OFF'}）。</p>
   <div class="opts"><button id="v-on" class="${voiceOn?'on':''}">🔊 読み上げ ON</button><button id="v-off" class="${!voiceOn?'on':''}">🔇 OFF</button></div>
+  <div class="opts"><button id="m-on" class="${micOn?'on':''}" ${SR?'':'disabled'}>🎤 声で答える ON</button><button id="m-off" class="${!micOn?'on':''}">🎤 OFF</button></div>
+  <p class="muted" style="margin:0 0 6px">${SR ? '🏃 走りながら: 読み上げのあと「エー」「ビー」「シー」「ディー」か「1〜4」と言えば答えられる。画面は点けたままポケットへ（消えると止まる）。' : 'この端末のブラウザは音声認識に対応していない（iPhoneはSafariで開いて）'}</p>
   <div class="grid" style="margin-top:8px">
     <button class="btn" data-mode="random">🎲 全章からランダム10問</button>
     <button class="btn gold" data-mode="wrong" ${wrong?'':'disabled'}>🔁 間違えた問題だけ（${wrong}問）</button>
@@ -391,7 +404,9 @@ function renderQuizMenu(){
   <h3 style="margin:18px 0 8px;font-size:15px">章を選んで10問</h3>
   <div class="grid">${DATA.chapters.map(c => { const sc = chapterScore(c.id); return `<button class="chap" data-ch="${c.id}"><span class="em">${c.emoji}</span><span class="t">第${c.id}章 ${esc(c.title)}</span><span class="badge ${sc.ok===c.quiz.length&&sc.n?'gold':sc.n?'ok':''}">${sc.n?`${sc.ok}/${c.quiz.length}`:'—'}</span></button>`; }).join('')}</div>`;
   app.querySelector('#v-on').onclick = () => { voiceOn = true; S.set('voice', true); renderQuizMenu(); };
-  app.querySelector('#v-off').onclick = () => { voiceOn = false; S.set('voice', false); renderQuizMenu(); };
+  app.querySelector('#v-off').onclick = () => { voiceOn = false; S.set('voice', false); micOn = false; S.set('mic', false); renderQuizMenu(); };
+  app.querySelector('#m-on').onclick = () => { micOn = true; S.set('mic', true); voiceOn = true; S.set('voice', true); renderQuizMenu(); };
+  app.querySelector('#m-off').onclick = () => { micOn = false; S.set('mic', false); renderQuizMenu(); };
   app.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => startRun({ mode:b.dataset.mode }));
   app.querySelectorAll('.chap').forEach(b => b.onclick = () => startRun({ mode:'chapter', ch:+b.dataset.ch }));
 }
@@ -442,14 +457,27 @@ function renderQ(){
   ${RUN.exam ? '' : `<div class="muted" style="font-size:12px">第${q.ch}章 ${esc(q.chTitle)}</div>`}
   <div class="q">Q${RUN.i+1}. ${esc(q.q)}</div>
   <div class="choices">${q.order.map((oi, k) => `<button class="choice" data-k="${k}"><span class="k">${'ABCD'[k]}</span><span>${esc(q.c[oi])}</span></button>`).join('')}</div>
-  <div id="fb"></div>`;
+  <div id="fb"></div>
+  <div id="listen" class="listen" hidden>🎤 聞いています… 「エー／ビー／シー／ディー」か「1〜4」</div>`;
   app.querySelector('#quit').onclick = () => { if(confirm('やめる？（ここまでの記録は残らない）')){ endRun(true); } };
   app.querySelectorAll('.choice').forEach(b => b.onclick = () => answer(+b.dataset.k));
   clearInterval(RUN.timer); RUN.timer = setInterval(() => { const t = app.querySelector('#timer'); if(!t) return; if(RUN.exam){ const left = RUN.limit-elapsed(); t.textContent = fmtT(Math.max(0,left)); t.classList.toggle('warn', left < 300); if(left<=0){ clearInterval(RUN.timer); finish(); } } else t.textContent = fmtT(elapsed()); }, 500);
-  if(!RUN.exam && voiceOn){ speak(`問題${RUN.i+1}。${q.q}`).then(()=> RUN && RUN.i===RUN.qs.indexOf(q) && !RUN.answered ? speak(q.order.map((oi,k)=>`${'ABCD'[k]}、${q.c[oi]}`).join('。'), 1.1) : null); }
+  if(!RUN.exam && voiceOn){ const me = RUN.i; speak(`問題${RUN.i+1}。${q.q}`).then(()=> RUN && RUN.i===me && !RUN.answered ? speak(q.order.map((oi,k)=>`${'ABCD'[k]}、${q.c[oi]}`).join('。'), 1.1) : null).then(() => { if(micOn && RUN && RUN.i===me && !RUN.answered) listenLoop(me); }); }
+  if(micOn) keepAwake();
 }
-function answer(k){
-  if(RUN.answered) return; RUN.answered = true; stopSpeak();
+async function listenLoop(me){
+  for(let t=0; t<3; t++){
+    if(!RUN || RUN.i!==me || RUN.answered) return;
+    const r = await listenOnce();
+    if(!RUN || RUN.i!==me || RUN.answered) return;
+    if(r && r.k >= 0){ stopListen(); answer(r.k, true); return; }
+    if(r && r.err === 'not-allowed'){ stopListen(); await speak('マイクの許可が必要です。'); return; }
+    await speak(t < 2 ? 'もう一度、エー、ビー、シー、ディー、で答えてください。' : '聞き取れませんでした。画面で選んでください。');
+  }
+  stopListen();
+}
+function answer(k, byVoice){
+  if(RUN.answered) return; RUN.answered = true; stopSpeak(); stopListen();
   const q = RUN.qs[RUN.i], ok = k===q.answer;
   RUN.results.push({ key:q.key, ok, picked:k, q });
   const m = mastery(); const r = m[q.key] || {ok:0, ng:0}; if(ok) r.ok++; else r.ng++; r.last = ok; r.at = today(); m[q.key] = r; S.set('mastery', m);
@@ -460,19 +488,21 @@ function answer(k){
   if(ok) pingPong(); else buzz();
   const fb = app.querySelector('#fb'); fb.innerHTML = `<div class="fb ${ok?'ok':'ng'}"><b>${ok?'ピンポーン！ 正解':'ブブー… 正解は '+'ABCD'[q.answer]}</b>${esc(q.e)}</div><button class="btn" id="next">${RUN.i+1<RUN.qs.length?'次の問題 ›':'結果を見る'}</button>`;
   fb.querySelector('#next').onclick = next;
-  if(voiceOn){ speak(ok ? '正解。' : `残念。正解は、${q.c[q.a]}。`).then(()=> speak(q.e, 1.1)); }
-  if(ok){ RUN.auto = setTimeout(() => { if(RUN && RUN.answered) next(); }, voiceOn ? 6500 : 1800); }
+  const me = RUN.i;
+  if(voiceOn){ speak(ok ? (byVoice ? `${'ABCD'[k]}。正解。` : '正解。') : `${byVoice ? 'ABCD'[k]+'。' : ''}残念。正解は、${'ABCD'[q.answer]}、${q.c[q.a]}。`).then(()=> speak(q.e, 1.1)).then(() => { if(micOn && RUN && RUN.i===me && RUN.answered){ clearTimeout(RUN.auto); RUN.auto = setTimeout(next, 800); } }); }
+  if(ok && !micOn){ RUN.auto = setTimeout(() => { if(RUN && RUN.answered) next(); }, voiceOn ? 6500 : 1800); }
 }
-function next(){ if(!RUN) return; clearTimeout(RUN.auto); stopSpeak(); RUN.answered = false; RUN.i++; if(RUN.i >= RUN.qs.length) return finish(); renderQ(); window.scrollTo(0,0); }
-function endRun(abort){ if(RUN){ clearInterval(RUN.timer); clearTimeout(RUN.auto); } stopSpeak(); RUN = null; VIEW = null; render(); }
+function next(){ if(!RUN) return; clearTimeout(RUN.auto); stopSpeak(); stopListen(); RUN.answered = false; RUN.i++; if(RUN.i >= RUN.qs.length) return finish(); renderQ(); window.scrollTo(0,0); }
+function endRun(abort){ if(RUN){ clearInterval(RUN.timer); clearTimeout(RUN.auto); } stopSpeak(); stopListen(); RUN = null; VIEW = null; render(); }
 function finish(){
-  clearInterval(RUN.timer); clearTimeout(RUN.auto); stopSpeak();
+  clearInterval(RUN.timer); clearTimeout(RUN.auto); stopSpeak(); stopListen();
   const r = RUN, n = r.qs.length, ok = r.results.filter(x=>x.ok).length, sec = elapsed(), pct = Math.round(ok/n*100);
   const answeredAll = r.results.length === n; // 時間切れの場合は未回答＝不正解
   const hist = S.get('history', []); hist.push({ at: (d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`)(new Date()), mode: r.opt.mode, ch: r.opt.ch||null, n, ok, pct, sec }); S.set('history', hist.slice(-200));
   const pass = r.exam ? pct >= DATA.exam.pass : pct===100;
   const msg = r.exam ? (pass ? '🎉 合格ライン突破！' : `あと${Math.ceil(n*DATA.exam.pass/100)-ok}問で合格ライン`) : pct===100 ? '🎉 パーフェクト！' : pct>=80 ? 'いい感じ！' : pct>=60 ? 'もう一息' : '教科書に戻ろう';
   if(pass) fanfare(); else if(pct>=70) pingPong();
+  if(voiceOn && !r.exam) speak(`終了。${n}問中${ok}問正解。${msg}`);
   const byCh = {}; r.results.forEach(x => { const b = byCh[x.q.ch] = byCh[x.q.ch]||{ok:0,n:0,t:x.q.chTitle}; b.n++; if(x.ok) b.ok++; });
   app.innerHTML = `<div class="top"><h1>${r.exam?'🏆 模試の結果':'🎯 結果'}</h1></div>
   <div class="card"><div class="score"><div class="big">${ok}<small> / ${n}</small></div><div class="msg">${msg}</div><div class="meta num">${pct}%　${fmtT(sec)}${r.exam?`　合格ライン ${DATA.exam.pass}%`:''}${answeredAll?'':'　（時間切れ）'}</div></div></div>
