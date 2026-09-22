@@ -98,6 +98,13 @@ a{color:var(--accent)}
 .stamp.show{animation:pop .7s ease-out}
 @keyframes pop{0%{opacity:0;transform:scale(.4)}25%{opacity:1;transform:scale(1.15)}60%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1)}}
 .timer{font-size:13px;color:var(--ink2)}
+.sd{position:fixed;inset:0;background:rgba(36,26,20,.55);z-index:40;display:flex;align-items:flex-end;justify-content:center;padding:16px}
+.sd-card{background:var(--paper);color:var(--ink);border-radius:20px;padding:20px;width:100%;max-width:520px;box-shadow:var(--shadow)}
+.sd-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+.sd-row .muted{font-size:12px}
+.sw{flex:none;width:54px;height:32px;border-radius:999px;background:var(--line);position:relative;transition:background .2s}
+.sw i{position:absolute;top:3px;left:3px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.3);transition:left .2s}
+.sw.on{background:var(--accent)} .sw.on i{left:25px} .sw:disabled{opacity:.4}
 .listen{margin:12px 0;padding:10px 14px;border-radius:12px;background:var(--ok-bg);color:var(--ok);font-weight:700;font-size:14px;animation:pulse 1.2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
 .timer.warn{color:var(--ng);font-weight:700}
@@ -304,7 +311,7 @@ async function decrypt(pass, blob){
   return JSON.parse(new TextDecoder().decode(pt));
 }
 /* ===== 録音の再生（AI音声・暗号化ファイル audio/<name>.enc = iv12 + 暗号文） ===== */
-let aiVoice = S.get('ai_voice', true);
+let aiVoice = true;
 const clipCache = new Map(); let player = null;
 function getPlayer(){ if(!player){ player = document.createElement('audio'); player.setAttribute('playsinline',''); player.preload='auto'; document.body.appendChild(player); } return player; }
 function unlockPlayer(){ try{ const p = getPlayer(); p.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA='; p.play().catch(()=>{}); }catch(e){} }
@@ -420,7 +427,7 @@ function renderLesson(id){
   <div class="nav">${i>0?`<button id="prev">‹ 第${DATA.chapters[i-1].id}章</button>`:'<span></span>'}${i<DATA.chapters.length-1?`<button id="next">第${DATA.chapters[i+1].id}章 ›</button>`:'<span></span>'}</div></div>`;
   app.querySelector('#back').onclick = () => { VIEW=null; render(); };
   app.querySelectorAll('[data-zoom]').forEach(b => b.onclick = () => { const ov = document.createElement('div'); ov.className='figov'; ov.innerHTML = `<div class="t">${esc(c.title)}</div><button class="x">閉じる ✕</button>${FIGS[b.dataset.zoom]}`; ov.querySelector('.x').onclick = () => ov.remove(); document.body.appendChild(ov); });
-  app.querySelector('#go').onclick = () => startRun({ mode:'chapter', ch:id });
+  app.querySelector('#go').onclick = () => startDialog({ mode:'chapter', ch:id }, c);
   const p = app.querySelector('#prev'), n = app.querySelector('#next');
   if(p) p.onclick = () => { VIEW={type:'lesson', ch:DATA.chapters[i-1].id}; render(); window.scrollTo(0,0); };
   if(n) n.onclick = () => { VIEW={type:'lesson', ch:DATA.chapters[i+1].id}; render(); window.scrollTo(0,0); };
@@ -432,8 +439,6 @@ function renderQuizMenu(){
   <div class="card"><h2 style="font-size:20px;font-weight:900">🎯 問題</h2><p class="muted" style="margin:6px 0 12px">答えを押すと ピンポーン／ブブー。声で読み上げ（${voiceOn?'ON':'OFF'}）。</p>
   <div class="opts"><button id="v-on" class="${voiceOn?'on':''}">🔊 読み上げ ON</button><button id="v-off" class="${!voiceOn?'on':''}">🔇 OFF</button></div>
   <div class="opts"><button id="m-on" class="${micOn?'on':''}" ${SR?'':'disabled'}>🎤 声で答える ON</button><button id="m-off" class="${!micOn?'on':''}">🎤 OFF</button></div>
-  <div class="opts"><button id="ai-on" class="${aiVoice?'on':''}">🎧 ずんだもん＆ひまり（録音）</button><button id="ai-off" class="${!aiVoice?'on':''}">📱 端末の声</button></div>
-  <div class="opts" style="align-items:center" ${aiVoice?'hidden':''}><label class="muted" for="voice-sel">🗣️ 声</label><select id="voice-sel" style="font:inherit;font-size:14px;padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:var(--paper);color:var(--ink);max-width:60%">${(()=>{ const vs = jaVoices(); return vs.length ? `<option value="">おまかせ</option>` + vs.map(v=>`<option value="${esc(v.name)}" ${v.name===voiceName?'selected':''}>${esc(v.name.replace(/\(.*?\)/g,'').trim())}</option>`).join('') : '<option value="">（この端末の日本語の声を読み込み中）</option>'; })()}</select><button id="voice-try" style="padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--paper);font-size:14px">▶ 試す</button></div>
   <p class="muted" style="margin:0 0 6px">${SR ? '🏃 走りながら: 読み上げのあと「エー」「ビー」「シー」「ディー」か「1〜4」と言えば答えられる。画面は点けたままポケットへ（消えると止まる）。🔇 声が出ないときは iPhone横のマナースイッチをオフに。' : 'この端末のブラウザは音声認識に対応していない（iPhoneはSafariで開いて）'}</p>
   <div class="grid" style="margin-top:8px">
     <button class="btn" data-mode="random">🎲 全章からランダム10問</button>
@@ -445,10 +450,6 @@ function renderQuizMenu(){
   <div class="grid">${DATA.chapters.map(c => { const sc = chapterScore(c.id); return `<button class="chap" data-ch="${c.id}"><span class="em">${c.emoji}</span><span class="t">第${c.id}章 ${esc(c.title)}</span><span class="badge ${sc.ok===c.quiz.length&&sc.n?'gold':sc.n?'ok':''}">${sc.n?`${sc.ok}/${c.quiz.length}`:'—'}</span></button>`; }).join('')}</div>`;
   app.querySelector('#v-on').onclick = () => { voiceOn = true; S.set('voice', true); renderQuizMenu(); };
   app.querySelector('#v-off').onclick = () => { voiceOn = false; S.set('voice', false); micOn = false; S.set('mic', false); renderQuizMenu(); };
-  app.querySelector('#ai-on').onclick = () => { aiVoice = true; S.set('ai_voice', true); renderQuizMenu(); };
-  app.querySelector('#ai-off').onclick = () => { aiVoice = false; S.set('ai_voice', false); renderQuizMenu(); };
-  app.querySelector('#voice-sel').onchange = e => { voiceName = e.target.value; S.set('voice_name', voiceName); };
-  app.querySelector('#voice-try').onclick = () => { const on = voiceOn; voiceOn = true; speakUnlock(); speak('こんにちは。エスプレッソのブリューレシオは、粉と液体の重さの比です。').then(()=>{ voiceOn = on; }); };
   app.querySelector('#m-on').onclick = () => { micOn = true; S.set('mic', true); voiceOn = true; S.set('voice', true); renderQuizMenu(); };
   app.querySelector('#m-off').onclick = () => { micOn = false; S.set('mic', false); renderQuizMenu(); };
   app.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => startRun({ mode:b.dataset.mode }));
@@ -463,6 +464,22 @@ function renderExamMenu(){
   <button class="btn gold" id="start">試験を始める</button>
   <p class="muted" style="margin-top:12px">コツ: 1問あたり約1分。迷ったら飛ばさず、いちばん近いものを選んで進む。</p>`;
   app.querySelector('#start').onclick = () => startRun({ mode:'exam' });
+}
+
+/* ========== 開始前の設定画面（教科書から入るとき） ========== */
+function startDialog(opt, c){
+  const ov = document.createElement('div'); ov.className = 'sd';
+  const draw = () => { ov.innerHTML = `<div class="sd-card">
+    <h2 style="font-size:20px;font-weight:900">🎯 ${esc(c.emoji)} 第${c.id}章の問題（${c.quiz.length}問）</h2>
+    <p class="muted" style="margin:6px 0 14px">答えを押すとピンポーン／ブブー。終わったら答え合わせが出る。</p>
+    <div class="sd-row"><div><b>🔊 読み上げ</b><div class="muted">問題と解説を声で読む（${esc(chVoice(c.id)==='z'?'ずんだもん':'冥鳴ひまり')}）</div></div><button class="sw ${voiceOn?'on':''}" data-k="voice"><i></i></button></div>
+    <div class="sd-row"><div><b>🎤 声で答える</b><div class="muted">${SR ? '読み上げのあと「エー〜ディー」か「1〜4」と言う。走りながら用' : 'このブラウザは非対応（iPhoneはSafariで）'}</div></div><button class="sw ${micOn?'on':''}" data-k="mic" ${SR?'':'disabled'}><i></i></button></div>
+    <div class="row" style="margin-top:18px"><button class="btn sub" id="sd-x">やめる</button><button class="btn" id="sd-go">▶ 開始</button></div></div>`;
+    ov.querySelectorAll('.sw').forEach(b => b.onclick = () => { if(b.dataset.k==='voice'){ voiceOn = !voiceOn; S.set('voice', voiceOn); if(!voiceOn){ micOn = false; S.set('mic', false); } } else { micOn = !micOn; S.set('mic', micOn); if(micOn){ voiceOn = true; S.set('voice', true); } } draw(); });
+    ov.querySelector('#sd-x').onclick = () => ov.remove();
+    ov.querySelector('#sd-go').onclick = () => { ov.remove(); startRun(opt); };
+  };
+  draw(); document.body.appendChild(ov);
 }
 
 /* ========== 出題 ========== */
