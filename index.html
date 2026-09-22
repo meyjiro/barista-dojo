@@ -361,7 +361,7 @@ const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recog = null, wakeLock = null;
 function stopListen(){ if(recog){ try{ recog.onresult = null; recog.onend = null; recog.onerror = null; recog.abort(); }catch(e){} recog = null; } const li = document.getElementById('listen'); if(li) li.hidden = true; }
 // 聞き取った言葉 → 0..3（A/B/C/D・1〜4・日本語読み）
-function parseChoice(t){ t = (t||'').toLowerCase().replace(/[\s。、．.,]/g,''); const map = [ [/^(a|エー|えー|えい|1|１|一|いち|いちばん|ａ)/,0], [/^(b|ビー|びー|2|２|二|に|にばん|ｂ)/,1], [/^(c|シー|しー|3|３|三|さん|さんばん|ｃ)/,2], [/^(d|ディー|でぃー|4|４|四|よん|し|よんばん|ｄ)/,3] ]; for(const [re,i] of map){ if(re.test(t)) return i; } const m = t.match(/(a|b|c|d|エー|ビー|シー|ディー|[1-4１-４一二三四])/); if(m){ const k = m[1]; if(/^(a|エー|1|１|一)$/.test(k)) return 0; if(/^(b|ビー|2|２|二)$/.test(k)) return 1; if(/^(c|シー|3|３|三)$/.test(k)) return 2; return 3; } return -1; }
+function parseChoice(t){ t = (t||'').toLowerCase().replace(/[\s。、．.,]/g,''); if(t.length > 10) return -1; const nm = t.match(/([1-4１-４一二三四]|いち|さん|よん|しばん)/); if(nm){ const k = nm[1]; if(/^(1|１|一|いち)$/.test(k)) return 0; if(/^(2|２|二)$/.test(k)) return 1; if(/^(3|３|三|さん)$/.test(k)) return 2; return 3; } const map = [ [/^(a|エー|えー|えい|1|１|一|いち|いちばん|ａ)/,0], [/^(b|ビー|びー|2|２|二|に|にばん|ｂ)/,1], [/^(c|シー|しー|3|３|三|さん|さんばん|ｃ)/,2], [/^(d|ディー|でぃー|4|４|四|よん|し|よんばん|ｄ)/,3] ]; for(const [re,i] of map){ if(re.test(t)) return i; } const m = t.match(/(a|b|c|d|エー|ビー|シー|ディー|[1-4１-４一二三四])/); if(m){ const k = m[1]; if(/^(a|エー|1|１|一)$/.test(k)) return 0; if(/^(b|ビー|2|２|二)$/.test(k)) return 1; if(/^(c|シー|3|３|三)$/.test(k)) return 2; return 3; } return -1; }
 function listenOnce(){ return new Promise(res => { if(!SR){ res(null); return; } try{ stopListen(); recog = new SR(); recog.lang = 'ja-JP'; recog.interimResults = false; recog.maxAlternatives = 5; let done = false; const fin = v => { if(done) return; done = true; res(v); }; recog.onresult = e => { const alts = [...e.results[0]].map(a => a.transcript); for(const a of alts){ const k = parseChoice(a); if(k >= 0){ fin({k, heard:a}); return; } } fin({k:-1, heard:alts[0]||''}); }; recog.onerror = e => fin({k:-1, err:e.error}); recog.onend = () => fin(null); const li = document.getElementById('listen'); if(li) li.hidden = false; recog.start(); }catch(e){ res(null); } }); }
 async function keepAwake(){ try{ if(navigator.wakeLock && !wakeLock){ wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } }catch(e){} }
 document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible' && RUN && micOn) keepAwake(); });
@@ -439,7 +439,7 @@ function renderQuizMenu(){
   <div class="card"><h2 style="font-size:20px;font-weight:900">🎯 問題</h2><p class="muted" style="margin:6px 0 12px">答えを押すと ピンポーン／ブブー。声で読み上げ（${voiceOn?'ON':'OFF'}）。</p>
   <div class="opts"><button id="v-on" class="${voiceOn?'on':''}">🔊 読み上げ ON</button><button id="v-off" class="${!voiceOn?'on':''}">🔇 OFF</button></div>
   <div class="opts"><button id="m-on" class="${micOn?'on':''}" ${SR?'':'disabled'}>🎤 声で答える ON</button><button id="m-off" class="${!micOn?'on':''}">🎤 OFF</button></div>
-  <p class="muted" style="margin:0 0 6px">${SR ? '🏃 走りながら: 読み上げのあと「エー」「ビー」「シー」「ディー」か「1〜4」と言えば答えられる。画面は点けたままポケットへ（消えると止まる）。🔇 声が出ないときは iPhone横のマナースイッチをオフに。' : 'この端末のブラウザは音声認識に対応していない（iPhoneはSafariで開いて）'}</p>
+  <p class="muted" style="margin:0 0 6px">${SR ? '🏃 走りながら: 読み上げの途中でも「1」「2」「3」「4」と番号で答えられる。🎧 イヤホン推奨（スピーカーだと読み上げの声を拾うことがある）。画面は点けたままポケットへ（消えると止まる）。🔇 声が出ないときは iPhone横のマナースイッチをオフに。' : 'この端末のブラウザは音声認識に対応していない（iPhoneはSafariで開いて）'}</p>
   <div class="grid" style="margin-top:8px">
     <button class="btn" data-mode="random">🎲 全章からランダム10問</button>
     <button class="btn gold" data-mode="wrong" ${wrong?'':'disabled'}>🔁 間違えた問題だけ（${wrong}問）</button>
@@ -473,7 +473,7 @@ function startDialog(opt, c){
     <h2 style="font-size:20px;font-weight:900">🎯 ${esc(c.emoji)} 第${c.id}章の問題（${c.quiz.length}問）</h2>
     <p class="muted" style="margin:6px 0 14px">答えを押すとピンポーン／ブブー。終わったら答え合わせが出る。</p>
     <div class="sd-row"><div><b>🔊 読み上げ</b><div class="muted">問題と解説を声で読む（${esc(chVoice(c.id)==='z'?'ずんだもん':'冥鳴ひまり')}）</div></div><button class="sw ${voiceOn?'on':''}" data-k="voice"><i></i></button></div>
-    <div class="sd-row"><div><b>🎤 声で答える</b><div class="muted">${SR ? '読み上げのあと「エー〜ディー」か「1〜4」と言う。走りながら用' : 'このブラウザは非対応（iPhoneはSafariで）'}</div></div><button class="sw ${micOn?'on':''}" data-k="mic" ${SR?'':'disabled'}><i></i></button></div>
+    <div class="sd-row"><div><b>🎤 声で答える</b><div class="muted">${SR ? '問題のあと「1〜4」の番号で答える。走りながら用' : 'このブラウザは非対応（iPhoneはSafariで）'}</div></div><button class="sw ${micOn?'on':''}" data-k="mic" ${SR?'':'disabled'}><i></i></button></div>
     <div class="row" style="margin-top:18px"><button class="btn sub" id="sd-x">やめる</button><button class="btn" id="sd-go">▶ 開始</button></div></div>`;
     ov.querySelectorAll('.sw').forEach(b => b.onclick = () => { if(b.dataset.k==='voice'){ voiceOn = !voiceOn; S.set('voice', voiceOn); if(!voiceOn){ micOn = false; S.set('mic', false); } } else { micOn = !micOn; S.set('mic', micOn); if(micOn){ voiceOn = true; S.set('voice', true); } } draw(); });
     ov.querySelector('#sd-x').onclick = () => ov.remove();
@@ -517,25 +517,32 @@ function renderQ(){
   <div class="qtop"><span class="num">${RUN.i+1} / ${n}</span><div class="bar"><i style="width:${(RUN.i/n)*100}%"></i></div><span class="timer num" id="timer">${RUN.exam ? fmtT(RUN.limit-elapsed()) : fmtT(elapsed())}</span></div>
   ${RUN.exam ? '' : `<div class="muted" style="font-size:12px">第${q.ch}章 ${esc(q.chTitle)}</div>`}
   <div class="q">Q${RUN.i+1}. ${esc(q.q)}</div>
-  <div class="choices">${q.order.map((oi, k) => `<button class="choice" data-k="${k}"><span class="k">${'ABCD'[k]}</span><span>${esc(q.c[oi])}</span></button>`).join('')}</div>
+  <div class="choices">${q.order.map((oi, k) => `<button class="choice" data-k="${k}"><span class="k">${k+1}</span><span>${esc(q.c[oi])}</span></button>`).join('')}</div>
   <div id="fb"></div>
-  <div id="listen" class="listen" hidden>🎤 聞いています… 「エー／ビー／シー／ディー」か「1〜4」</div>`;
+  <div id="listen" class="listen" hidden>🎤 聞いています… 「1」「2」「3」「4」と言って</div>`;
   app.querySelector('#quit').onclick = () => { if(confirm('やめる？（ここまでの記録は残らない）')){ endRun(true); } };
   app.querySelectorAll('.choice').forEach(b => b.onclick = () => answer(+b.dataset.k));
   clearInterval(RUN.timer); RUN.timer = setInterval(() => { const t = app.querySelector('#timer'); if(!t) return; if(RUN.exam){ const left = RUN.limit-elapsed(); t.textContent = fmtT(Math.max(0,left)); t.classList.toggle('warn', left < 300); if(left<=0){ clearInterval(RUN.timer); finish(); } } else t.textContent = fmtT(elapsed()); }, 500);
-  if(!RUN.exam && voiceOn){ const me = RUN.i; prefetch(['e_'+q.clip].concat(RUN.qs[me+1] ? ['q_'+RUN.qs[me+1].clip, 'e_'+RUN.qs[me+1].clip] : [])); say('q_'+q.clip, `問題${RUN.i+1}。${q.q}。` + q.order.map((oi,k)=>`${'ABCD'[k]}、${q.c[oi]}`).join('。'), 1.1).then(() => { if(micOn && RUN && RUN.i===me && !RUN.answered) listenLoop(me); }); }
+  if(!RUN.exam && voiceOn){ const me = RUN.i; prefetch(['c_'+q.clip, 'e_'+q.clip].concat(RUN.qs[me+1] ? ['q_'+RUN.qs[me+1].clip, 'c_'+RUN.qs[me+1].clip] : []));
+    if(micOn) listenLoop(me);   // 🔴 読み上げの最初から聞いている（問題文や選択肢の途中でも番号を言えば答えられる。イヤホン前提）
+    (async () => {
+      await say('q_'+q.clip, `問題${RUN.i+1}。${q.q}`);
+      if(!RUN || RUN.i!==me || RUN.answered) return;
+      await say('c_'+q.clip, q.order.map((oi,k)=>`${k+1}番、${q.c[oi]}`).join('。'), 1.1);
+    })(); }
   if(micOn) keepAwake();
 }
 async function listenLoop(me){
-  for(let t=0; t<3; t++){
-    if(!RUN || RUN.i!==me || RUN.answered) return;
+  const t0 = Date.now(); let tries = 0;
+  while(RUN && RUN.i===me && !RUN.answered && Date.now()-t0 < 60000 && tries < 20){
+    tries++;
     const r = await listenOnce();
     if(!RUN || RUN.i!==me || RUN.answered) return;
     if(r && r.k >= 0){ stopListen(); answer(r.k, true); return; }
     if(r && r.err === 'not-allowed'){ stopListen(); await say('ui_mic_' + chVoice(RUN.qs[me].ch), 'マイクの許可が必要です。'); return; }
-    await say((t < 2 ? 'ui_again_' : 'ui_giveup_') + chVoice(RUN.qs[me].ch), t < 2 ? 'もう一度、エー、ビー、シー、ディー、で答えてください。' : '聞き取れませんでした。画面で選んでください。');
+    // 聞き取れなかった／無音で切れた → 何も言わずにすぐ聞き直す
   }
-  stopListen();
+  if(RUN && RUN.i===me && !RUN.answered){ stopListen(); await say('ui_giveup_' + chVoice(RUN.qs[me].ch), '聞き取れませんでした。画面で選んでください。'); }
 }
 function answer(k, byVoice){
   if(RUN.answered) return; RUN.answered = true; stopSpeak(); stopClip(); stopListen();
@@ -547,10 +554,10 @@ function answer(k, byVoice){
   btns.forEach((b,i) => { b.disabled = true; if(i===q.answer) b.classList.add('ok'); else if(i===k) b.classList.add('ng'); else b.classList.add('dim'); });
   const st = document.getElementById('stamp'); st.textContent = ok ? '⭕️' : '❌'; st.classList.remove('show'); void st.offsetWidth; st.classList.add('show');
   if(ok) pingPong(); else buzz();
-  const fb = app.querySelector('#fb'); fb.innerHTML = `<div class="fb ${ok?'ok':'ng'}"><b>${ok?'ピンポーン！ 正解':'ブブー… 正解は '+'ABCD'[q.answer]}</b>${esc(q.e)}</div><button class="btn" id="next">${RUN.i+1<RUN.qs.length?'次の問題 ›':'結果を見る'}</button>`;
+  const fb = app.querySelector('#fb'); fb.innerHTML = `<div class="fb ${ok?'ok':'ng'}"><b>${ok?'ピンポーン！ 正解':'ブブー… 正解は '+(q.answer+1)+'番'}</b>${esc(q.e)}</div><button class="btn" id="next">${RUN.i+1<RUN.qs.length?'次の問題 ›':'結果を見る'}</button>`;
   fb.querySelector('#next').onclick = next;
   const me = RUN.i;
-  if(voiceOn){ say((ok ? 'ui_correct_' : 'ui_wrong_') + chVoice(q.ch), ok ? '正解。' : '残念。').then(()=> say('e_'+q.clip, `正解は、${'ABCD'[q.answer]}、${q.c[q.a]}。${q.e}`, 1.1)).then(() => { if(micOn && RUN && RUN.i===me && RUN.answered){ clearTimeout(RUN.auto); RUN.auto = setTimeout(next, 800); } }); }
+  if(voiceOn){ say((ok ? 'ui_correct_' : 'ui_wrong_') + chVoice(q.ch), ok ? '正解。' : '残念。').then(()=> say('e_'+q.clip, `正解は、${q.answer+1}番、${q.c[q.a]}。${q.e}`, 1.1)).then(() => { if(micOn && RUN && RUN.i===me && RUN.answered){ clearTimeout(RUN.auto); RUN.auto = setTimeout(next, 800); } }); }
   if(ok && !micOn){ RUN.auto = setTimeout(() => { if(RUN && RUN.answered) next(); }, voiceOn ? 6500 : 1800); }
 }
 function next(){ if(!RUN) return; clearTimeout(RUN.auto); stopSpeak(); stopClip(); stopListen(); RUN.answered = false; RUN.i++; if(RUN.i >= RUN.qs.length) return finish(); renderQ(); window.scrollTo(0,0); }
