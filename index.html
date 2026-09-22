@@ -310,7 +310,8 @@ water: `<svg viewBox="0 0 680 220" role="img" aria-label="SCAの水の基準">${
 };
 
 /* ========== 保存 ========== */
-const S = { get(k, d){ try{ const v = localStorage.getItem('bd.'+k); return v==null? d : JSON.parse(v);}catch(e){ return d; } }, set(k, v){ try{ localStorage.setItem('bd.'+k, JSON.stringify(v)); }catch(e){} if(k==='history'||k==='mastery'||k==='read'){ if(typeof syncPush === 'function' && !S._quiet) syncPush(); } } };
+const TEST = /[?&]test\b/.test(location.search); const NS = TEST ? 'bdt.' : 'bd.';
+const S = { get(k, d){ try{ const v = localStorage.getItem(NS+k); return v==null? d : JSON.parse(v);}catch(e){ return d; } }, set(k, v){ try{ localStorage.setItem(NS+k, JSON.stringify(v)); }catch(e){} if(k==='history'||k==='mastery'||k==='read'){ if(typeof syncPush === 'function' && !S._quiet) syncPush(); } } };
 
 /* ========== 暗号 ========== */
 let KEY = null;
@@ -385,7 +386,7 @@ try{ speechSynthesis.getVoices(); }catch(e){}
 /* ========== クラウド保存（合言葉が同じなら端末が変わっても記録が続く） ========== */
 const SYNC_URL = 'https://gachirezu.com/dojo/sync.php';
 let syncKey = null, syncTimer = null, syncState = { at: null, ok: null };
-async function syncInit(pass){ const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('barista-dojo:' + pass)); syncKey = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2,'0')).join(''); }
+async function syncInit(pass){ const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('barista-dojo:' + pass + (TEST ? ':test' : ''))); syncKey = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2,'0')).join(''); }
 function localState(){ return { history: S.get('history', []), mastery: S.get('mastery', {}), read: S.get('read', {}) }; }
 function mergeState(a, b){ // 両方の記録を合わせる（消さない）
   const hk = h => `${h.at}|${h.mode}|${h.ch}|${h.ok}/${h.n}`; const seen = new Set(); const history = [];
@@ -421,7 +422,7 @@ function chapterScore(ch){ const m = mastery(); let ok=0, n=0; DATA.chapters.fin
 function setTab(t){ TAB = t; VIEW = null; stopSpeak(); [...tabs.querySelectorAll('button')].forEach(b => b.classList.toggle('on', b.dataset.tab===t)); render(); window.scrollTo(0,0); }
 tabs.addEventListener('click', e => { const b = e.target.closest('button'); if(b) setTab(b.dataset.tab); });
 
-function header(){ return `<div class="top"><img class="bean" src="img/bean_smile.png" alt=""><h1>${esc(DATA.title)}</h1><div class="sub">${esc(DATA.sub)}<br>本番: ${DATA.exam.questions}問・${DATA.exam.minutes}分・${DATA.exam.pass}%合格</div></div>`; }
+function header(){ return `<div class="top"><img class="bean" src="img/bean_smile.png" alt=""><h1>${esc(DATA.title)}${TEST?' <span class="pill" style="vertical-align:middle">テスト用</span>':''}</h1><div class="sub">${esc(DATA.sub)}<br>本番: ${DATA.exam.questions}問・${DATA.exam.minutes}分・${DATA.exam.pass}%合格</div></div>`; }
 
 function render(){
   if(TAB==='home') return VIEW && VIEW.type==='lesson' ? renderLesson(VIEW.ch) : renderHome();
@@ -632,14 +633,14 @@ function renderStats(){
   <p class="muted" id="sync-st" style="margin-top:14px">${syncLabel()}　— 合言葉が同じなら、携帯を替えても・ブラウザの履歴を消しても記録は続く</p>
   <div class="row" style="margin-top:8px"><button class="btn sub" id="reset">記録を消す</button><button class="btn sub" id="lock">合言葉を忘れる</button></div>`;
   app.querySelector('#reset').onclick = () => { if(confirm('成績と記録を全部消す？（クラウドの分も消える）')){ S._quiet = true; S.set('history', []); S.set('mastery', {}); S.set('read', {}); S._quiet = false; syncPush(); renderStats(); } };
-  app.querySelector('#lock').onclick = () => { localStorage.removeItem('bd.pass'); location.reload(); };
+  app.querySelector('#lock').onclick = () => { localStorage.removeItem(NS+'pass'); location.reload(); };
 }
 
 /* ========== 入口 ========== */
 async function boot(){
   let blob; try{ blob = await (await fetch('data.enc?v=' + Date.now())).json(); }catch(e){ app.innerHTML = `<div class="gate"><img class="bean" src="img/bean_shock.png" alt=""><p>データが読めなかった。電波を確認してもう一度開いて。</p></div>`; return; }
   const saved = S.get('pass', null);
-  if(saved){ try{ DATA = await decrypt(saved, blob); await syncInit(saved); await syncPull(); return start(); }catch(e){ localStorage.removeItem('bd.pass'); } }
+  if(saved){ try{ DATA = await decrypt(saved, blob); await syncInit(saved); await syncPull(); return start(); }catch(e){ localStorage.removeItem(NS+'pass'); } }
   app.innerHTML = `<div class="gate"><img class="bean" src="img/bean_happy.png" alt=""><h1 style="font-size:24px;font-weight:900">バリスタ道場</h1><p class="muted">${blob.chapters}章・${blob.questions}問　${esc(blob.built||'')}</p>
   <input id="pw" type="password" placeholder="合言葉" autocomplete="off" autocapitalize="off"><div class="err" id="err"></div><button class="btn" id="enter">入る</button></div>`;
   const go = async () => { const p = app.querySelector('#pw').value.trim(); app.querySelector('#err').textContent = ''; try{ DATA = await decrypt(p, blob); S.set('pass', p); await syncInit(p); await syncPull(); syncPush(); start(); }catch(e){ app.querySelector('#err').textContent = '合言葉が違う'; } };
