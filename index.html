@@ -308,6 +308,7 @@ let aiVoice = S.get('ai_voice', true);
 const clipCache = new Map(); let player = null;
 function getPlayer(){ if(!player){ player = document.createElement('audio'); player.setAttribute('playsinline',''); player.preload='auto'; document.body.appendChild(player); } return player; }
 function unlockPlayer(){ try{ const p = getPlayer(); p.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA='; p.play().catch(()=>{}); }catch(e){} }
+function chVoice(ch){ const v = DATA && DATA.audio && DATA.audio.voices; return (v && v[String(ch)]) || (ch%2===1 ? 'z' : 'h'); }
 function hasClip(name){ return !!(DATA && DATA.audio && DATA.audio.clips && DATA.audio.clips[name]); }
 async function clipUrl(name){
   if(clipCache.has(name)) return clipCache.get(name);
@@ -431,7 +432,7 @@ function renderQuizMenu(){
   <div class="card"><h2 style="font-size:20px;font-weight:900">🎯 問題</h2><p class="muted" style="margin:6px 0 12px">答えを押すと ピンポーン／ブブー。声で読み上げ（${voiceOn?'ON':'OFF'}）。</p>
   <div class="opts"><button id="v-on" class="${voiceOn?'on':''}">🔊 読み上げ ON</button><button id="v-off" class="${!voiceOn?'on':''}">🔇 OFF</button></div>
   <div class="opts"><button id="m-on" class="${micOn?'on':''}" ${SR?'':'disabled'}>🎤 声で答える ON</button><button id="m-off" class="${!micOn?'on':''}">🎤 OFF</button></div>
-  <div class="opts"><button id="ai-on" class="${aiVoice?'on':''}">✨ AI音声（録音）</button><button id="ai-off" class="${!aiVoice?'on':''}">📱 端末の声</button></div>
+  <div class="opts"><button id="ai-on" class="${aiVoice?'on':''}">🎧 ずんだもん＆ひまり（録音）</button><button id="ai-off" class="${!aiVoice?'on':''}">📱 端末の声</button></div>
   <div class="opts" style="align-items:center" ${aiVoice?'hidden':''}><label class="muted" for="voice-sel">🗣️ 声</label><select id="voice-sel" style="font:inherit;font-size:14px;padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:var(--paper);color:var(--ink);max-width:60%">${(()=>{ const vs = jaVoices(); return vs.length ? `<option value="">おまかせ</option>` + vs.map(v=>`<option value="${esc(v.name)}" ${v.name===voiceName?'selected':''}>${esc(v.name.replace(/\(.*?\)/g,'').trim())}</option>`).join('') : '<option value="">（この端末の日本語の声を読み込み中）</option>'; })()}</select><button id="voice-try" style="padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--paper);font-size:14px">▶ 試す</button></div>
   <p class="muted" style="margin:0 0 6px">${SR ? '🏃 走りながら: 読み上げのあと「エー」「ビー」「シー」「ディー」か「1〜4」と言えば答えられる。画面は点けたままポケットへ（消えると止まる）。🔇 声が出ないときは iPhone横のマナースイッチをオフに。' : 'この端末のブラウザは音声認識に対応していない（iPhoneはSafariで開いて）'}</p>
   <div class="grid" style="margin-top:8px">
@@ -439,6 +440,7 @@ function renderQuizMenu(){
     <button class="btn gold" data-mode="wrong" ${wrong?'':'disabled'}>🔁 間違えた問題だけ（${wrong}問）</button>
     <button class="btn sub" data-mode="unseen" ${unseen?'':'disabled'}>🆕 まだ解いていない問題（${unseen}問）から10問</button>
   </div></div>
+  <p class="muted" style="margin:0 0 6px">🎧 録音の声: 奇数章＝ずんだもん、偶数章＝冥鳴ひまり。結果発表はどちらかがランダム。（音声: VOICEVOX:ずんだもん／VOICEVOX:冥鳴ひまり）</p>
   <h3 style="margin:18px 0 8px;font-size:15px">章を選んで10問</h3>
   <div class="grid">${DATA.chapters.map(c => { const sc = chapterScore(c.id); return `<button class="chap" data-ch="${c.id}"><span class="em">${c.emoji}</span><span class="t">第${c.id}章 ${esc(c.title)}</span><span class="badge ${sc.ok===c.quiz.length&&sc.n?'gold':sc.n?'ok':''}">${sc.n?`${sc.ok}/${c.quiz.length}`:'—'}</span></button>`; }).join('')}</div>`;
   app.querySelector('#v-on').onclick = () => { voiceOn = true; S.set('voice', true); renderQuizMenu(); };
@@ -513,8 +515,8 @@ async function listenLoop(me){
     const r = await listenOnce();
     if(!RUN || RUN.i!==me || RUN.answered) return;
     if(r && r.k >= 0){ stopListen(); answer(r.k, true); return; }
-    if(r && r.err === 'not-allowed'){ stopListen(); await say('ui_mic', 'マイクの許可が必要です。'); return; }
-    await say(t < 2 ? 'ui_again' : 'ui_giveup', t < 2 ? 'もう一度、エー、ビー、シー、ディー、で答えてください。' : '聞き取れませんでした。画面で選んでください。');
+    if(r && r.err === 'not-allowed'){ stopListen(); await say('ui_mic_' + chVoice(RUN.qs[me].ch), 'マイクの許可が必要です。'); return; }
+    await say((t < 2 ? 'ui_again_' : 'ui_giveup_') + chVoice(RUN.qs[me].ch), t < 2 ? 'もう一度、エー、ビー、シー、ディー、で答えてください。' : '聞き取れませんでした。画面で選んでください。');
   }
   stopListen();
 }
@@ -531,7 +533,7 @@ function answer(k, byVoice){
   const fb = app.querySelector('#fb'); fb.innerHTML = `<div class="fb ${ok?'ok':'ng'}"><b>${ok?'ピンポーン！ 正解':'ブブー… 正解は '+'ABCD'[q.answer]}</b>${esc(q.e)}</div><button class="btn" id="next">${RUN.i+1<RUN.qs.length?'次の問題 ›':'結果を見る'}</button>`;
   fb.querySelector('#next').onclick = next;
   const me = RUN.i;
-  if(voiceOn){ say(ok ? 'ui_correct' : 'ui_wrong', ok ? '正解。' : '残念。').then(()=> say('e_'+q.clip, `正解は、${'ABCD'[q.answer]}、${q.c[q.a]}。${q.e}`, 1.1)).then(() => { if(micOn && RUN && RUN.i===me && RUN.answered){ clearTimeout(RUN.auto); RUN.auto = setTimeout(next, 800); } }); }
+  if(voiceOn){ say((ok ? 'ui_correct_' : 'ui_wrong_') + chVoice(q.ch), ok ? '正解。' : '残念。').then(()=> say('e_'+q.clip, `正解は、${'ABCD'[q.answer]}、${q.c[q.a]}。${q.e}`, 1.1)).then(() => { if(micOn && RUN && RUN.i===me && RUN.answered){ clearTimeout(RUN.auto); RUN.auto = setTimeout(next, 800); } }); }
   if(ok && !micOn){ RUN.auto = setTimeout(() => { if(RUN && RUN.answered) next(); }, voiceOn ? 6500 : 1800); }
 }
 function next(){ if(!RUN) return; clearTimeout(RUN.auto); stopSpeak(); stopClip(); stopListen(); RUN.answered = false; RUN.i++; if(RUN.i >= RUN.qs.length) return finish(); renderQ(); window.scrollTo(0,0); }
@@ -544,8 +546,8 @@ function finish(){
   const pass = r.exam ? pct >= DATA.exam.pass : pct===100;
   const msg = r.exam ? (pass ? '🎉 合格ライン突破！' : `あと${Math.ceil(n*DATA.exam.pass/100)-ok}問で合格ライン`) : pct===100 ? '🎉 パーフェクト！' : pct>=80 ? 'いい感じ！' : pct>=60 ? 'もう一息' : '教科書に戻ろう';
   if(pass) fanfare(); else if(pct>=70) pingPong();
-  if(voiceOn && !r.exam){ const band = pct===100 ? 'perfect' : pct>=80 ? 'good' : pct>=60 ? 'soso' : 'low'; const scoreClip = n===10 ? `zd_score10_${ok}` : null; (async()=>{ await say('zd_done', 'おつかれさま。'); if(scoreClip && hasClip(scoreClip)) await say(scoreClip, ''); else await speak(`結果は、${n}問中${ok}問正解。`); await say('zd_'+band, msg); })(); }
-  if(voiceOn && r.exam){ (async()=>{ await say('zd_done', 'おつかれさま。'); await speak(`結果は、${n}問中${ok}問正解、${pct}パーセント。`); await say(pass ? 'zd_pass' : 'zd_fail', pass ? '合格ラインを超えた。' : 'あと少し。'); })(); }
+  if(voiceOn){ const rv = Math.random() < 0.5 ? 'z' : 'h'; const band = pct===100 ? 'perfect' : pct>=80 ? 'good' : pct>=60 ? 'soso' : 'low';
+    (async()=>{ await say('ui_done_'+rv, 'おつかれさま。'); if(n===10 && hasClip(`score10_${ok}_${rv}`)) await say(`score10_${ok}_${rv}`, ''); else await speak(`結果は、${n}問中${ok}問正解。`); await say(r.exam ? (pass ? 'ui_pass_' : 'ui_fail_') + rv : 'ui_'+band+'_'+rv, msg); })(); }
   const byCh = {}; r.results.forEach(x => { const b = byCh[x.q.ch] = byCh[x.q.ch]||{ok:0,n:0,t:x.q.chTitle}; b.n++; if(x.ok) b.ok++; });
   app.innerHTML = `<div class="top"><h1>${r.exam?'🏆 模試の結果':'🎯 結果'}</h1></div>
   <div class="card"><div class="score"><div class="big">${ok}<small> / ${n}</small></div><div class="msg">${msg}</div><div class="meta num">${pct}%　${fmtT(sec)}${r.exam?`　合格ライン ${DATA.exam.pass}%`:''}${answeredAll?'':'　（時間切れ）'}</div></div></div>
