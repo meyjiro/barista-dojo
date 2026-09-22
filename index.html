@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#1f5c48">
 <meta name="robots" content="noindex, nofollow">
 <title>バリスタ道場</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E☕%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="icon.png">
 <link rel="apple-touch-icon" href="icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&family=Noto+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -172,6 +172,18 @@ mark.ex{background:var(--ng-bg);color:var(--ng);font-weight:700;padding:1px 5px;
 .tbl caption{caption-side:top;text-align:left;font-weight:700;padding:8px 12px;font-family:"Zen Maru Gothic",sans-serif}
 .lesson h3 .sic{margin-right:6px}
 .lesson p.bul{padding-left:4px}
+/* 豆キャラ */
+.bean{display:block;max-width:100%;height:auto}
+.gate .bean{width:180px;margin:0 auto}
+.hero{position:relative;overflow:hidden}
+.hero .bean{position:absolute;right:-10px;bottom:-18px;width:120px;opacity:.95;transform:rotate(-8deg)}
+.hero .hz{position:relative;z-index:1;padding-right:110px}
+.score .bean{width:150px;margin:0 auto 6px}
+.stamp img{width:200px;height:auto;filter:drop-shadow(0 10px 20px rgba(0,0,0,.35))}
+.stamp .mk{position:absolute;font-size:64px;transform:translate(70px,-70px)}
+.listen .bean{width:36px;display:inline-block;vertical-align:middle;margin-right:6px}
+.sd-card .bean{width:70px;float:right;margin:-6px 0 0 8px}
+.top .bean{width:34px;margin-right:2px}
 @media (prefers-reduced-motion:reduce){ .stamp.show{animation:none} .choice{transition:none} }
 [hidden]{display:none!important}
 </style>
@@ -390,7 +402,7 @@ function chapterScore(ch){ const m = mastery(); let ok=0, n=0; DATA.chapters.fin
 function setTab(t){ TAB = t; VIEW = null; stopSpeak(); [...tabs.querySelectorAll('button')].forEach(b => b.classList.toggle('on', b.dataset.tab===t)); render(); window.scrollTo(0,0); }
 tabs.addEventListener('click', e => { const b = e.target.closest('button'); if(b) setTab(b.dataset.tab); });
 
-function header(){ return `<div class="top"><h1>☕ ${esc(DATA.title)}</h1><div class="sub">${esc(DATA.sub)}<br>本番: ${DATA.exam.questions}問・${DATA.exam.minutes}分・${DATA.exam.pass}%合格</div></div>`; }
+function header(){ return `<div class="top"><img class="bean" src="img/bean_smile.png" alt=""><h1>${esc(DATA.title)}</h1><div class="sub">${esc(DATA.sub)}<br>本番: ${DATA.exam.questions}問・${DATA.exam.minutes}分・${DATA.exam.pass}%合格</div></div>`; }
 
 function render(){
   if(TAB==='home') return VIEW && VIEW.type==='lesson' ? renderLesson(VIEW.ch) : renderHome();
@@ -404,8 +416,8 @@ function renderHome(){
   const hist = S.get('history', []);
   const total = allQ().length, m = mastery(); const learned = Object.values(m).filter(r=>r.last).length;
   app.innerHTML = header() + `
-  <div class="hero"><h2>今日も一杯、いこう</h2><p>教科書10章を読んで、章ごとの10問で確かめる。全部緑になったら模試へ。</p>
-  <p style="margin-top:10px"><span class="num">${learned}</span><span style="font-size:13px"> / ${total}問 正解済み　</span><span class="num">${hist.length}</span><span style="font-size:13px"> 回挑戦</span></p></div>
+  <div class="hero"><div class="hz"><h2>今日も一杯、いこう</h2><p>教科書10章を読んで、章ごとの10問で確かめる。全部緑になったら模試へ。</p>
+  <p style="margin-top:10px"><span class="num">${learned}</span><span style="font-size:13px"> / ${total}問 正解済み　</span><span class="num">${hist.length}</span><span style="font-size:13px"> 回挑戦</span></p></div><img class="bean" src="img/${learned>=total*0.7?'bean_happy':learned>0?'bean_smile':'bean_calm'}.png" alt=""></div>
   <div class="grid">` + DATA.chapters.map(c => { const sc = chapterScore(c.id); const badge = sc.n===0 ? (read[c.id] ? '<span class="badge">読了</span>' : '<span class="badge">未読</span>') : sc.ok===c.quiz.length ? '<span class="badge gold">満点 ★</span>' : `<span class="badge ${sc.ok>=c.quiz.length*0.7?'ok':''}">${sc.ok}/${c.quiz.length}</span>`;
     return `<button class="chap" data-ch="${c.id}"><span class="em">${c.emoji}</span><span><span class="t">第${c.id}章 ${esc(c.title)}</span><br><span class="m">${esc(c.lead.replace(/[*=\[\]]/g,'').slice(0,38))}…</span></span>${badge}</button>`; }).join('') + `</div>
   <p class="muted" style="margin-top:18px">出題範囲はSCA Coffee Skills Programの公式カタログ（Barista Skills Intermediate）に沿って構成。数字は各章の「覚える3行」がそのまま試験の鍵。</p>`;
@@ -459,8 +471,8 @@ function renderQuizMenu(){
 function renderExamMenu(){
   const hist = S.get('history', []).filter(h=>h.mode==='exam'); const best = hist.reduce((a,h)=>Math.max(a,h.pct),0);
   app.innerHTML = header() + `
-  <div class="hero"><h2>🏆 模擬試験</h2><p>本番と同じ ${DATA.exam.questions}問・${DATA.exam.minutes}分・${DATA.exam.pass}%で合格。途中の正解・不正解は出ない（本番と同じ）。終わったら全部の答えと解説が出る。</p>
-  <p style="margin-top:8px"><span class="num">${hist.length}</span><span style="font-size:13px"> 回受験　最高 </span><span class="num">${best}</span><span style="font-size:13px">%</span></p></div>
+  <div class="hero"><img class="bean" src="img/bean_calm.png" alt=""><div class="hz"><h2>🏆 模擬試験</h2><p>本番と同じ ${DATA.exam.questions}問・${DATA.exam.minutes}分・${DATA.exam.pass}%で合格。途中の正解・不正解は出ない（本番と同じ）。終わったら全部の答えと解説が出る。</p>
+  <p style="margin-top:8px"><span class="num">${hist.length}</span><span style="font-size:13px"> 回受験　最高 </span><span class="num">${best}</span><span style="font-size:13px">%</span></p></div></div>
   <button class="btn gold" id="start">試験を始める</button>
   <p class="muted" style="margin-top:12px">コツ: 1問あたり約1分。迷ったら飛ばさず、いちばん近いものを選んで進む。</p>`;
   app.querySelector('#start').onclick = () => startRun({ mode:'exam' });
@@ -470,7 +482,7 @@ function renderExamMenu(){
 function startDialog(opt, c){
   const ov = document.createElement('div'); ov.className = 'sd';
   const draw = () => { ov.innerHTML = `<div class="sd-card">
-    <h2 style="font-size:20px;font-weight:900">🎯 ${esc(c.emoji)} 第${c.id}章の問題（${c.quiz.length}問）</h2>
+    <img class="bean" src="img/bean_smile.png" alt=""><h2 style="font-size:20px;font-weight:900">🎯 ${esc(c.emoji)} 第${c.id}章の問題（${c.quiz.length}問）</h2>
     <p class="muted" style="margin:6px 0 14px">答えを押すとピンポーン／ブブー。終わったら答え合わせが出る。</p>
     <div class="sd-row"><div><b>🔊 読み上げ</b><div class="muted">問題と解説を声で読む（${esc(chVoice(c.id)==='z'?'ずんだもん':'冥鳴ひまり')}）</div></div><button class="sw ${voiceOn?'on':''}" data-k="voice"><i></i></button></div>
     <div class="sd-row"><div><b>🎤 声で答える</b><div class="muted">${SR ? '問題のあと「1〜4」の番号で答える。走りながら用' : 'このブラウザは非対応（iPhoneはSafariで）'}</div></div><button class="sw ${micOn?'on':''}" data-k="mic" ${SR?'':'disabled'}><i></i></button></div>
@@ -519,7 +531,7 @@ function renderQ(){
   <div class="q">Q${RUN.i+1}. ${esc(q.q)}</div>
   <div class="choices">${q.order.map((oi, k) => `<button class="choice" data-k="${k}"><span class="k">${k+1}</span><span>${esc(q.c[oi])}</span></button>`).join('')}</div>
   <div id="fb"></div>
-  <div id="listen" class="listen" hidden>🎤 聞いています… 「1」「2」「3」「4」と言って</div>`;
+  <div id="listen" class="listen" hidden><img class="bean" src="img/bean_calm.png" alt="">🎤 聞いています… 「1」「2」「3」「4」と言って</div>`;
   app.querySelector('#quit').onclick = () => { if(confirm('やめる？（ここまでの記録は残らない）')){ endRun(true); } };
   app.querySelectorAll('.choice').forEach(b => b.onclick = () => answer(+b.dataset.k));
   clearInterval(RUN.timer); RUN.timer = setInterval(() => { const t = app.querySelector('#timer'); if(!t) return; if(RUN.exam){ const left = RUN.limit-elapsed(); t.textContent = fmtT(Math.max(0,left)); t.classList.toggle('warn', left < 300); if(left<=0){ clearInterval(RUN.timer); finish(); } } else t.textContent = fmtT(elapsed()); }, 500);
@@ -552,7 +564,7 @@ function answer(k, byVoice){
   const btns = app.querySelectorAll('.choice');
   if(RUN.exam){ btns.forEach((b,i)=>{ b.classList.toggle('picked', i===k); b.disabled = true; }); tick(); setTimeout(next, 350); return; }
   btns.forEach((b,i) => { b.disabled = true; if(i===q.answer) b.classList.add('ok'); else if(i===k) b.classList.add('ng'); else b.classList.add('dim'); });
-  const st = document.getElementById('stamp'); st.textContent = ok ? '⭕️' : '❌'; st.classList.remove('show'); void st.offsetWidth; st.classList.add('show');
+  const st = document.getElementById('stamp'); st.innerHTML = `<img src="img/${ok?'bean_happy':'bean_shock'}.png" alt=""><span class="mk">${ok?'⭕️':'❌'}</span>`; st.classList.remove('show'); void st.offsetWidth; st.classList.add('show');
   if(ok) pingPong(); else buzz();
   const fb = app.querySelector('#fb'); fb.innerHTML = `<div class="fb ${ok?'ok':'ng'}"><b>${ok?'ピンポーン！ 正解':'ブブー… 正解は '+(q.answer+1)+'番'}</b>${esc(q.e)}</div><button class="btn" id="next">${RUN.i+1<RUN.qs.length?'次の問題 ›':'結果を見る'}</button>`;
   fb.querySelector('#next').onclick = next;
@@ -574,7 +586,7 @@ function finish(){
     (async()=>{ const dn = Math.floor(Math.random()*5); await say(hasClip(`done${dn}_${rv}`) ? `done${dn}_${rv}` : 'ui_done_'+rv, 'ちょっち、おつかれさま。'); if(n===10 && hasClip(`score10_${ok}_${rv}`)) await say(`score10_${ok}_${rv}`, ''); else await speak(`結果は、${n}問中${ok}問正解。`); await say(r.exam ? (pass ? 'ui_pass_' : 'ui_fail_') + rv : 'ui_'+band+'_'+rv, msg); })(); }
   const byCh = {}; r.results.forEach(x => { const b = byCh[x.q.ch] = byCh[x.q.ch]||{ok:0,n:0,t:x.q.chTitle}; b.n++; if(x.ok) b.ok++; });
   app.innerHTML = `<div class="top"><h1>${r.exam?'🏆 模試の結果':'🎯 結果'}</h1></div>
-  <div class="card"><div class="score"><div class="big">${ok}<small> / ${n}</small></div><div class="msg">${msg}</div><div class="meta num">${pct}%　${fmtT(sec)}${r.exam?`　合格ライン ${DATA.exam.pass}%`:''}${answeredAll?'':'　（時間切れ）'}</div></div></div>
+  <div class="card"><div class="score"><img class="bean" src="img/${(r.exam ? pass : pct>=80) ? 'bean_happy' : pct>=60 ? 'bean_smile' : pct>=40 ? 'bean_calm' : 'bean_shock'}.png" alt=""><div class="big">${ok}<small> / ${n}</small></div><div class="msg">${msg}</div><div class="meta num">${pct}%　${fmtT(sec)}${r.exam?`　合格ライン ${DATA.exam.pass}%`:''}${answeredAll?'':'　（時間切れ）'}</div></div></div>
   ${r.exam ? `<h3 style="margin:16px 0 8px;font-size:15px">章ごと</h3><div class="mastery">${Object.keys(byCh).sort((a,b)=>a-b).map(c=>`<div class="mrow"><span class="num">${c}</span><div class="b"><i style="width:${byCh[c].ok/byCh[c].n*100}%"></i></div><span class="num" style="text-align:right">${byCh[c].ok}/${byCh[c].n}</span></div>`).join('')}</div>` : ''}
   <div class="row" style="margin:16px 0"><button class="btn" id="again">もう一回</button>${r.results.some(x=>!x.ok)?'<button class="btn gold" id="retry">間違えたやつだけ</button>':''}<button class="btn sub" id="home">教科書へ</button></div>
   <h3 style="margin:8px 0;font-size:15px">答え合わせ</h3>
@@ -605,10 +617,10 @@ function renderStats(){
 
 /* ========== 入口 ========== */
 async function boot(){
-  let blob; try{ blob = await (await fetch('data.enc?v=' + Date.now())).json(); }catch(e){ app.innerHTML = `<div class="gate"><div class="cup">☕</div><p>データが読めなかった。電波を確認してもう一度開いて。</p></div>`; return; }
+  let blob; try{ blob = await (await fetch('data.enc?v=' + Date.now())).json(); }catch(e){ app.innerHTML = `<div class="gate"><img class="bean" src="img/bean_shock.png" alt=""><p>データが読めなかった。電波を確認してもう一度開いて。</p></div>`; return; }
   const saved = S.get('pass', null);
   if(saved){ try{ DATA = await decrypt(saved, blob); return start(); }catch(e){ localStorage.removeItem('bd.pass'); } }
-  app.innerHTML = `<div class="gate"><div class="cup">☕</div><h1 style="font-size:24px;font-weight:900">バリスタ道場</h1><p class="muted">${blob.chapters}章・${blob.questions}問　${esc(blob.built||'')}</p>
+  app.innerHTML = `<div class="gate"><img class="bean" src="img/bean_happy.png" alt=""><h1 style="font-size:24px;font-weight:900">バリスタ道場</h1><p class="muted">${blob.chapters}章・${blob.questions}問　${esc(blob.built||'')}</p>
   <input id="pw" type="password" placeholder="合言葉" autocomplete="off" autocapitalize="off"><div class="err" id="err"></div><button class="btn" id="enter">入る</button></div>`;
   const go = async () => { const p = app.querySelector('#pw').value.trim(); app.querySelector('#err').textContent = ''; try{ DATA = await decrypt(p, blob); S.set('pass', p); start(); }catch(e){ app.querySelector('#err').textContent = '合言葉が違う'; } };
   app.querySelector('#enter').onclick = go; app.querySelector('#pw').addEventListener('keydown', e => { if(e.key==='Enter') go(); });
