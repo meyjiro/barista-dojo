@@ -310,7 +310,7 @@ water: `<svg viewBox="0 0 680 220" role="img" aria-label="SCAの水の基準">${
 };
 
 /* ========== 保存 ========== */
-const S = { get(k, d){ try{ const v = localStorage.getItem('bd.'+k); return v==null? d : JSON.parse(v);}catch(e){ return d; } }, set(k, v){ try{ localStorage.setItem('bd.'+k, JSON.stringify(v)); }catch(e){} } };
+const S = { get(k, d){ try{ const v = localStorage.getItem('bd.'+k); return v==null? d : JSON.parse(v);}catch(e){ return d; } }, set(k, v){ try{ localStorage.setItem('bd.'+k, JSON.stringify(v)); }catch(e){} if(k==='history'||k==='mastery'||k==='read'){ if(typeof syncPush === 'function' && !S._quiet) syncPush(); } } };
 
 /* ========== 暗号 ========== */
 let KEY = null;
@@ -381,6 +381,25 @@ function stopSpeak(){ try{ speechSynthesis.cancel(); }catch(e){} }
 function speakUnlock(){ try{ speechSynthesis.cancel(); speechSynthesis.resume(); const u=new SpeechSynthesisUtterance('。'); u.lang='ja-JP'; u.volume=0.01; speechSynthesis.speak(u); }catch(e){} }
 function speak(text, rate){ return new Promise(res => { if(!voiceOn || !('speechSynthesis' in window)) return res(); let done=false; const fin=()=>{ if(!done){ done=true; res(); } }; try{ const u = new SpeechSynthesisUtterance(text); u.lang='ja-JP'; u.rate = rate||1.05; const vs = jaVoices(); const v = (voiceName && vs.find(x=>x.name===voiceName)) || vs.find(v=>/Kyoko|O-ren|Hattori|Otoya/i.test(v.name)) || vs[0]; if(v) u.voice=v; u.onend=fin; u.onerror=fin; setTimeout(fin, Math.max(6000, String(text).length*400)); speechSynthesis.speak(u); }catch(e){ fin(); } }); }
 try{ speechSynthesis.getVoices(); }catch(e){}
+
+/* ========== クラウド保存（合言葉が同じなら端末が変わっても記録が続く） ========== */
+const SYNC_URL = 'https://gachirezu.com/dojo/sync.php';
+let syncKey = null, syncTimer = null, syncState = { at: null, ok: null };
+async function syncInit(pass){ const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('barista-dojo:' + pass)); syncKey = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2,'0')).join(''); }
+function localState(){ return { history: S.get('history', []), mastery: S.get('mastery', {}), read: S.get('read', {}) }; }
+function mergeState(a, b){ // 両方の記録を合わせる（消さない）
+  const hk = h => `${h.at}|${h.mode}|${h.ch}|${h.ok}/${h.n}`; const seen = new Set(); const history = [];
+  for(const h of [...(a.history||[]), ...(b.history||[])]){ const k = hk(h); if(!seen.has(k)){ seen.add(k); history.push(h); } }
+  history.sort((x,y) => (x.at||'').localeCompare(y.at||''));
+  const mastery = { ...(a.mastery||{}) };
+  for(const [k,v] of Object.entries(b.mastery||{})){ const cur = mastery[k]; if(!cur) mastery[k] = v; else mastery[k] = { ok: Math.max(cur.ok||0, v.ok||0), ng: Math.max(cur.ng||0, v.ng||0), last: ((v.at||'') >= (cur.at||'')) ? v.last : cur.last, at: (v.at||'') >= (cur.at||'') ? v.at : cur.at }; }
+  const read = { ...(a.read||{}) }; for(const [k,v] of Object.entries(b.read||{})){ if(!read[k] || v > read[k]) read[k] = v; }
+  return { history: history.slice(-500), mastery, read };
+}
+async function syncPull(){ if(!syncKey) return; try{ const r = await fetch(`${SYNC_URL}?k=${syncKey}`, { cache:'no-store' }); if(!r.ok) throw new Error(r.status); const remote = await r.json(); if(remote && typeof remote === 'object'){ const m = mergeState(localState(), remote); S._quiet = true; S.set('history', m.history); S.set('mastery', m.mastery); S.set('read', m.read); S._quiet = false; } syncState = { at: new Date(), ok: true }; }catch(e){ syncState = { at: new Date(), ok: false, err: String(e) }; } }
+function syncPush(){ if(!syncKey) return; clearTimeout(syncTimer); syncTimer = setTimeout(async () => { try{ const body = JSON.stringify({ ...localState(), updated: new Date().toISOString(), device: navigator.userAgent.slice(0,60) }); const r = await fetch(`${SYNC_URL}?k=${syncKey}`, { method:'POST', headers:{ 'Content-Type':'application/json' }, body }); syncState = { at: new Date(), ok: r.ok }; }catch(e){ syncState = { at: new Date(), ok: false, err: String(e) }; } const el = document.getElementById('sync-st'); if(el) el.textContent = syncLabel(); }, 1500); }
+function syncLabel(){ if(!syncState.at) return '☁️ 未同期'; const t = syncState.at.toTimeString().slice(0,5); return syncState.ok ? `☁️ クラウドに保存済み ${t}` : `⚠️ クラウド保存に失敗 ${t}（端末には残っている）`; }
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden') syncPush(); });
 
 /* ========== 状態 ========== */
 let DATA = null, TAB = 'home', VIEW = null;
@@ -610,8 +629,9 @@ function renderStats(){
   <div class="hlist">${hist.slice(-8).reverse().map(h=>`<div><span>${h.at.replace('T',' ')} ${h.mode==='exam'?'🏆模試':h.mode==='chapter'?'第'+h.ch+'章':h.mode==='wrong'?'🔁復習':'🎲ランダム'}</span><span class="num">${h.ok}/${h.n}　${fmtT(h.sec)}</span></div>`).join('')}</div></div>
   <h3 style="margin:18px 0 8px;font-size:15px">章ごとの定着（最後に解いたときの正解率）</h3>
   <div class="card"><div class="mastery">${DATA.chapters.map(c=>{ const s = chapterScore(c.id); const p = s.n? Math.round(s.ok/c.quiz.length*100):0; return `<div class="mrow"><span>${c.emoji}</span><div><div style="font-size:13px">第${c.id}章 ${esc(c.title)}</div><div class="b"><i style="width:${p}%"></i></div></div><span class="num" style="text-align:right">${s.n?p+'%':'—'}</span></div>`; }).join('')}</div></div>
-  <div class="row" style="margin-top:16px"><button class="btn sub" id="reset">記録を消す</button><button class="btn sub" id="lock">合言葉を忘れる</button></div>`;
-  app.querySelector('#reset').onclick = () => { if(confirm('成績と記録を全部消す？')){ S.set('history', []); S.set('mastery', {}); S.set('read', {}); renderStats(); } };
+  <p class="muted" id="sync-st" style="margin-top:14px">${syncLabel()}　— 合言葉が同じなら、携帯を替えても・ブラウザの履歴を消しても記録は続く</p>
+  <div class="row" style="margin-top:8px"><button class="btn sub" id="reset">記録を消す</button><button class="btn sub" id="lock">合言葉を忘れる</button></div>`;
+  app.querySelector('#reset').onclick = () => { if(confirm('成績と記録を全部消す？（クラウドの分も消える）')){ S._quiet = true; S.set('history', []); S.set('mastery', {}); S.set('read', {}); S._quiet = false; syncPush(); renderStats(); } };
   app.querySelector('#lock').onclick = () => { localStorage.removeItem('bd.pass'); location.reload(); };
 }
 
@@ -619,10 +639,10 @@ function renderStats(){
 async function boot(){
   let blob; try{ blob = await (await fetch('data.enc?v=' + Date.now())).json(); }catch(e){ app.innerHTML = `<div class="gate"><img class="bean" src="img/bean_shock.png" alt=""><p>データが読めなかった。電波を確認してもう一度開いて。</p></div>`; return; }
   const saved = S.get('pass', null);
-  if(saved){ try{ DATA = await decrypt(saved, blob); return start(); }catch(e){ localStorage.removeItem('bd.pass'); } }
+  if(saved){ try{ DATA = await decrypt(saved, blob); await syncInit(saved); await syncPull(); return start(); }catch(e){ localStorage.removeItem('bd.pass'); } }
   app.innerHTML = `<div class="gate"><img class="bean" src="img/bean_happy.png" alt=""><h1 style="font-size:24px;font-weight:900">バリスタ道場</h1><p class="muted">${blob.chapters}章・${blob.questions}問　${esc(blob.built||'')}</p>
   <input id="pw" type="password" placeholder="合言葉" autocomplete="off" autocapitalize="off"><div class="err" id="err"></div><button class="btn" id="enter">入る</button></div>`;
-  const go = async () => { const p = app.querySelector('#pw').value.trim(); app.querySelector('#err').textContent = ''; try{ DATA = await decrypt(p, blob); S.set('pass', p); start(); }catch(e){ app.querySelector('#err').textContent = '合言葉が違う'; } };
+  const go = async () => { const p = app.querySelector('#pw').value.trim(); app.querySelector('#err').textContent = ''; try{ DATA = await decrypt(p, blob); S.set('pass', p); await syncInit(p); await syncPull(); syncPush(); start(); }catch(e){ app.querySelector('#err').textContent = '合言葉が違う'; } };
   app.querySelector('#enter').onclick = go; app.querySelector('#pw').addEventListener('keydown', e => { if(e.key==='Enter') go(); });
   app.querySelector('#pw').focus();
 }
