@@ -571,7 +571,7 @@ function finish(){
   const msg = r.exam ? (pass ? '🎉 合格ライン突破！' : `あと${Math.ceil(n*DATA.exam.pass/100)-ok}問で合格ライン`) : pct===100 ? '🎉 パーフェクト！' : pct>=80 ? 'いい感じ！' : pct>=60 ? 'もう一息' : '教科書に戻ろう';
   if(pass) fanfare(); else if(pct>=70) pingPong();
   if(voiceOn){ const rv = Math.random() < 0.5 ? 'z' : 'h'; const band = pct===100 ? 'perfect' : pct>=80 ? 'good' : pct>=60 ? 'soso' : 'low';
-    (async()=>{ await say('ui_done_'+rv, 'おつかれさま。'); if(n===10 && hasClip(`score10_${ok}_${rv}`)) await say(`score10_${ok}_${rv}`, ''); else await speak(`結果は、${n}問中${ok}問正解。`); await say(r.exam ? (pass ? 'ui_pass_' : 'ui_fail_') + rv : 'ui_'+band+'_'+rv, msg); })(); }
+    (async()=>{ const dn = Math.floor(Math.random()*5); await say(hasClip(`done${dn}_${rv}`) ? `done${dn}_${rv}` : 'ui_done_'+rv, 'ちょっち、おつかれさま。'); if(n===10 && hasClip(`score10_${ok}_${rv}`)) await say(`score10_${ok}_${rv}`, ''); else await speak(`結果は、${n}問中${ok}問正解。`); await say(r.exam ? (pass ? 'ui_pass_' : 'ui_fail_') + rv : 'ui_'+band+'_'+rv, msg); })(); }
   const byCh = {}; r.results.forEach(x => { const b = byCh[x.q.ch] = byCh[x.q.ch]||{ok:0,n:0,t:x.q.chTitle}; b.n++; if(x.ok) b.ok++; });
   app.innerHTML = `<div class="top"><h1>${r.exam?'🏆 模試の結果':'🎯 結果'}</h1></div>
   <div class="card"><div class="score"><div class="big">${ok}<small> / ${n}</small></div><div class="msg">${msg}</div><div class="meta num">${pct}%　${fmtT(sec)}${r.exam?`　合格ライン ${DATA.exam.pass}%`:''}${answeredAll?'':'　（時間切れ）'}</div></div></div>
