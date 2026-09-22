@@ -335,7 +335,7 @@ async function say(name, fallbackText, rate){
     try{
       const url = await clipUrl(name); if(my !== playToken) return;
       const p = getPlayer();
-      await new Promise(res => { let done=false; const fin=()=>{ if(!done){ done=true; p.onended=null; p.onerror=null; res(); } }; p.onended = fin; p.onerror = fin; p.src = url; p.play().catch(fin); setTimeout(fin, 60000); const iv = setInterval(()=>{ if(my !== playToken){ clearInterval(iv); fin(); } if(done) clearInterval(iv); }, 200); });
+      await new Promise(res => { let done=false; const fin=()=>{ if(!done){ done=true; if(p.onended===fin) p.onended=null; if(p.onerror===fin) p.onerror=null; res(); } }; p.onended = fin; p.onerror = fin; p.src = url; p.play().catch(fin); setTimeout(fin, 60000); const iv = setInterval(()=>{ if(my !== playToken){ clearInterval(iv); fin(); } if(done) clearInterval(iv); }, 100); });
       return;
     }catch(e){ /* 落ちたら端末の声へ */ }
   }
